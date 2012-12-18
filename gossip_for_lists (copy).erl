@@ -23,17 +23,16 @@ choose_random_node(MyPartition) ->
 	[RandomNode, MyUpdatedPartition]
 .
 
-gossip(MyPartition, N, MyValues, Mode, RoundsRemaining, Delay, Skips) ->
-	if Mode == readyToSend, RoundsRemaining > 0, Delay==0, Skips==0 ->
-		NewSkips=5,
+gossip(MyPartition, N, MyValues, Mode, RoundsRemaining, Delay) ->
+	if Mode == readyToSend, RoundsRemaining > 0, Delay==0 ->
 		RandomIndex = random:uniform(erlang:trunc(math:log(N)+1)),
 		RandomNode = lists:nth(RandomIndex, MyPartition),
 		io:format("~p gossipping with ~p~n",[self(), RandomNode]),
 		io:format("Message : ~p~n~n",[{self(), send, avg, MyValues, MyPartition}]),
 		RandomNode ! {self(), send, avg, MyValues, MyPartition},
-		gossip(MyPartition, N, MyValues, awaitingReply, RoundsRemaining - 1, 0, NewSkips);
+		gossip(MyPartition, N, MyValues, awaitingReply, RoundsRemaining - 1, 0);
 	
-	true -> NewSkips=Skips-1
+	true -> a
 	end,
 	
 	
@@ -46,7 +45,7 @@ gossip(MyPartition, N, MyValues, Mode, RoundsRemaining, Delay, Skips) ->
 			io:format("Message : ~p~n~n",[{self(), send, avg, MyValues, MyPartition}]),
 			RandomNodeInit ! {self(), send, avg, MyValues, MyPartition},
 			
-			gossip(MyPartition, N, MyValues, awaitingReply, RoundsRemaining - 1, 1, 1);
+			gossip(MyPartition, N, MyValues, awaitingReply, RoundsRemaining - 1, 0);
 			
 		{init, Pids} ->
 			MappingFun = fun(A) ->
@@ -60,7 +59,7 @@ gossip(MyPartition, N, MyValues, Mode, RoundsRemaining, Delay, Skips) ->
 			%NewPartition = lists:map(fun(A) -> lists:nth(A, Pids) end, MyPartition),
 			NewPartition = lists:map(MappingFun, MyPartition),
 			io:format("~p initialised :~n Partition: ~p~n Values:~p~n~n", [self(), NewPartition, MyValues]),
-			gossip(NewPartition, N, MyValues, initialised, RoundsRemaining, 1, 1);
+			gossip(NewPartition, N, MyValues, initialised, RoundsRemaining, 0);
 			
 			
 
@@ -77,7 +76,7 @@ gossip(MyPartition, N, MyValues, Mode, RoundsRemaining, Delay, Skips) ->
 								if 
 									NthValue=<length(MyValues) , NthValue=<length(NodeValues) ->
 										%io:format("averaging ~p'th values : ~p and ~p", [NthValue, lists:nth(NthValue,MyValues), lists:nth(NthValue,NodeValues)]),
-										((lists:nth(NthValue,MyValues)/2) + (lists:nth(NthValue,NodeValues)/2))/2;
+										(lists:nth(NthValue,MyValues) + lists:nth(NthValue,NodeValues))/2;
 									
 									NthValue>length(MyValues), NthValue=<length(NodeValues) ->
 										lists:nth(NthValue,NodeValues);
@@ -93,7 +92,7 @@ gossip(MyPartition, N, MyValues, Mode, RoundsRemaining, Delay, Skips) ->
 					io:format("~p new values: ~p~n", [self(),MyNewValues]),
 					Node_id ! {self(), reply, avg, MyValues, MyPartition},
 										
-					gossip(MyPartition, N, MyNewValues, readyToSend, RoundsRemaining, 1, NewSkips)
+					gossip(MyPartition, N, MyNewValues, readyToSend, RoundsRemaining, 0)
 			end;
 
 		{Node_id, reply, Gossip_op, NodeValues, Node_partition} ->
@@ -108,7 +107,7 @@ gossip(MyPartition, N, MyValues, Mode, RoundsRemaining, Delay, Skips) ->
 								if 
 									NthValue=<length(MyValues) , NthValue=<length(NodeValues) ->
 										%io:format("averaging ~p'th values : ~p and ~p", [NthValue, lists:nth(NthValue,MyValues), lists:nth(NthValue,NodeValues)]),
-										((lists:nth(NthValue,MyValues)/2) + (lists:nth(NthValue,NodeValues)/2))/2;
+										(lists:nth(NthValue,MyValues) + lists:nth(NthValue,NodeValues))/2;
 									
 									NthValue>length(MyValues), NthValue=<length(NodeValues) ->
 										lists:nth(NthValue,NodeValues);
@@ -126,31 +125,21 @@ gossip(MyPartition, N, MyValues, Mode, RoundsRemaining, Delay, Skips) ->
 					io:format("~p new values: ~p~n", [self(),MyNewValues]),
 					
 										
-					gossip(MyPartition, N, MyNewValues, readyToSend, RoundsRemaining, 0, NewSkips)	
+					gossip(MyPartition, N, MyNewValues, readyToSend, RoundsRemaining, 0)	
 					
 			end;
 		_ ->
 			io:format("~p in Other shit~n", [self()])
-
-		after 10000 ->
-			io:format("~p = ~p~n",[self(), average_final_values(MyValues, length(MyValues), 1, 0)])
 	
 	end	
-.
-
-average_final_values(FinalValues, Length, Index, Sum) ->
-	if Index =< Length ->
-		average_final_values(FinalValues, Length, Index+1, Sum+lists:nth(Index, FinalValues));
-	true -> Sum/Length
-	end
 .
 
 init_the_dhondus(N) ->
 	Values = lists:map(fun(_) -> random:uniform(100) end, lists:seq(0,N-1)),
 	Pids = lists:map(fun(_) -> spawn(gossip_for_lists, gossip, [lists:map(fun(_) -> random:uniform(N) end, lists:seq(0,erlang:trunc(math:log(N)))), 
 								N, 
-								lists:map(fun(_)->random:uniform(100)+0.5 end, lists:seq(1, random:uniform(2))), 
-								awaitingInitialisation, erlang:trunc(math:log(N) + 1), 0, 2]) 
+								lists:map(fun(_)->random:uniform(100)+0.5 end, lists:seq(1, random:uniform(3))), 
+								awaitingInitialisation, erlang:trunc(math:log(N) + 1), 0]) 
 			end, 
 		lists:seq(0,N-1)),
 
